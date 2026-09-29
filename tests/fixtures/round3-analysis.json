@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 4,
+  "exportedAt": "2026-08-12T12:00:00Z",
+  "entries": [
+    {
+      "id": "round3-analysis-a",
+      "title": "Panel miejski",
+      "createdAt": "2026-08-10T10:00:00Z",
+      "durationSec": 20,
+      "language": "pl",
+      "model": "import:json",
+      "sourceType": "text",
+      "processingProfile": "import",
+      "hasAudio": false,
+      "tags": ["dialog", "miasto"],
+      "analysisStatus": "done",
+      "transcriptRaw": "Dialog oznacza dwustronną rozmowę z mieszkańcami. Rekomendacja: publikować informację zwrotną.",
+      "transcript": "Dialog oznacza dwustronną rozmowę z mieszkańcami. Rekomendacja: publikować informację zwrotną.",
+      "summary": "Dialog wymaga informacji zwrotnej.",
+      "concepts": [{"term":"Dialog","definition":"Dwustronna rozmowa z mieszkańcami."}],
+      "methods": [{"name":"Warsztat","description":"Wspólna praca nad rozwiązaniami."}],
+      "theses": ["Dialog wymaga jasnego celu."],
+      "recommendations": ["Publikować informację zwrotną."],
+      "segments": [
+        {"start":0,"end":10,"text":"Dialog oznacza dwustronną rozmowę z mieszkańcami.","speakerId":"spk_0","speakerLabel":"Anna"},
+        {"start":10,"end":20,"text":"Rekomendacja: publikować informację zwrotną.","speakerId":"spk_1","speakerLabel":"Piotr"}
+      ]
+    },
+    {
+      "id": "round3-analysis-b",
+      "title": "Panel regionalny",
+      "createdAt": "2026-07-10T10:00:00Z",
+      "durationSec": 12,
+      "language": "pl",
+      "model": "import:json",
+      "sourceType": "text",
+      "processingProfile": "import",
+      "hasAudio": false,
+      "tags": ["dialog", "region"],
+      "analysisStatus": "done",
+      "transcriptRaw": "Dialog to proces rozmowy. Należy publikować informację zwrotną.",
+      "transcript": "Dialog to proces rozmowy. Należy publikować informację zwrotną.",
+      "summary": "Regionalny proces dialogu.",
+      "concepts": [{"term":"dialog","definition":"Proces rozmowy stron."}],
+      "methods": [],
+      "theses": ["Dialog buduje zaufanie."],
+      "recommendations": ["Publikować informację zwrotną."],
+      "segments": [
+        {"start":0,"end":6,"text":"Dialog to proces rozmowy.","speakerId":"spk_0","speakerLabel":"Marta"},
+        {"start":6,"end":12,"text":"Należy publikować informację zwrotną.","speakerId":"spk_0","speakerLabel":"Marta"}
+      ]
+    }
+  ]
+}

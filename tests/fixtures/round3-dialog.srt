@@ -1,0 +1,11 @@
+1
+00:00:00,000 --> 00:00:04,000
+Anna: Dialog z mieszkańcami zaczyna się od uważnego słuchania.
+
+2
+00:00:04,000 --> 00:00:09,000
+Piotr: Konsultacje społeczne potrzebują jasnego celu i informacji zwrotnej.
+
+3
+00:00:09,000 --> 00:00:14,000
+Anna: Rekomendujemy warsztat, mapowanie interesariuszy i publikację wyników.

@@ -1,0 +1,46 @@
+{
+  "lecture": {
+    "title": "Wykład o konsultacjach",
+    "segments": [
+      "Wprowadzenie do dialogu społecznego.",
+      "Cele i zasady konsultacji.",
+      "Przygotowanie procesu z mieszkańcami.",
+      "Dobór uczestników i kanałów kontaktu.",
+      "Prowadzenie spotkań warsztatowych.",
+      "Dokumentowanie uwag uczestników.",
+      "Analiza zebranych propozycji.",
+      "Informacja zwrotna po konsultacjach.",
+      "Ewaluacja jakości procesu.",
+      "Najczęstsze bariery organizacyjne.",
+      "Rekomendacje dla samorządu.",
+      "Podsumowanie i kolejne kroki."
+    ],
+    "groups": [[0, 1], [2, 3]]
+  },
+  "panel": {
+    "title": "Panel praktyków",
+    "segments": [
+      "Moderator otwiera rozmowę.",
+      "Pierwsza osoba opisuje doświadczenie miasta.",
+      "Druga osoba wskazuje barierę frekwencji.",
+      "Rozmowa przechodzi do narzędzi cyfrowych.",
+      "Panel omawia dostępność spotkań.",
+      "Pada przykład budżetu obywatelskiego.",
+      "Uczestnicy porównują metody.",
+      "Moderator zbiera rekomendacje.",
+      "Panel kończy się podsumowaniem."
+    ],
+    "groups": [[0], [1, 2]]
+  },
+  "chaotic": {
+    "title": "Materiał chaotyczny",
+    "segments": [
+      "Krótka uwaga bez kontekstu.",
+      "Zmiana tematu na transport.",
+      "Powrót do konsultacji.",
+      "Dygresja organizacyjna.",
+      "Pytanie z sali.",
+      "Urwane podsumowanie."
+    ]
+  }
+}
