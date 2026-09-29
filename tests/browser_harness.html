@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="pl">
+<meta charset="utf-8">
+<title>Skryptorium — Final Closure: test UI przy dużym archiwum</title>
+<style>
+  body { font: 15px/1.5 system-ui, sans-serif; margin: 24px; max-width: 1100px; color: #1a1a1a; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 24px 0 8px; }
+  .warn { background: #fff4e5; border: 1px solid #e0a458; padding: 12px 14px; border-radius: 6px; margin: 12px 0; }
+  .ok { background: #eaf6ec; border: 1px solid #7fb98a; padding: 10px 14px; border-radius: 6px; }
+  button { font: inherit; padding: 7px 13px; margin: 3px 4px 3px 0; border: 1px solid #999; background: #f6f6f6; border-radius: 5px; cursor: pointer; }
+  button:hover:not(:disabled) { background: #ececec; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.primary { background: #2c5aa0; color: #fff; border-color: #24487f; }
+  button.danger { background: #a02c2c; color: #fff; border-color: #7f2424; }
+  pre { background: #14161c; color: #e6e6e6; padding: 12px; border-radius: 6px; overflow: auto; max-height: 340px; font-size: 13px; }
+  table { border-collapse: collapse; margin: 10px 0; font-size: 14px; }
+  th, td { border: 1px solid #ccc; padding: 5px 10px; text-align: right; }
+  th:first-child, td:first-child { text-align: left; }
+  iframe { width: 100%; height: 420px; border: 1px solid #bbb; border-radius: 6px; margin-top: 10px; }
+  code { background: #eee; padding: 1px 5px; border-radius: 3px; }
+  ol li { margin: 4px 0; }
+</style>
+<body>
+
+<h1>Final Closure Pass — UI przy dużym archiwum</h1>
+<p>Pokrywa sekcję 5 specyfikacji (realny test przeglądarkowy 1000 / 2500 / 5000 wpisów)
+oraz sekcję 12 (trwałość po reloadzie).</p>
+
+<div class="warn">
+  <strong>Bezpieczeństwo Twoich danych.</strong> Harness zapisuje wyłącznie wpisy
+  o identyfikatorach zaczynających się od <code>bench_</code> i usuwa wyłącznie takie wpisy.
+  Twoje realne nagrania nie są nigdy kasowane ani modyfikowane.
+  Mimo to <strong>zrób kopię</strong> przyciskiem poniżej, zanim zaczniesz.
+</div>
+
+<h2>0. Uruchomienie</h2>
+<p>Harness musi działać z tego samego originu co aplikacja (inaczej przeglądarka
+zablokuje odczyt iframe’a). W katalogu projektu uruchom:</p>
+<pre>python -m http.server 8899</pre>
+<p>i otwórz <code>http://localhost:8899/tests/browser_harness.html</code></p>
+<p id="originCheck"></p>
+
+<h2>1. Kopia zapasowa</h2>
+<button id="backup">⬇ Pobierz kopię obecnego archiwum</button>
+<button id="countNow">Policz obecne wpisy</button>
+
+<h2>2. Pomiar</h2>
+<p>Każdy przebieg: zasiej N wpisów → załaduj aplikację w iframe → zmierz czas do
+wyrenderowania kart, płynność scrolla i czas wyszukiwania.</p>
+<button class="primary" data-bench="1000">Zmierz 1000</button>
+<button class="primary" data-bench="2500">Zmierz 2500</button>
+<button class="primary" data-bench="5000">Zmierz 5000</button>
+<button id="reloadTest">Test trwałości po reloadzie</button>
+<button class="danger" id="cleanup">✗ Usuń wpisy testowe (bench_*)</button>
+
+<div id="summary"></div>
+<pre id="out">gotowy</pre>
+<iframe id="app" title="Skryptorium"></iframe>
+
+<h2>3. Kroki ręczne (sekcje 10, 11, 14)</h2>
+<ol>
+  <li><strong>Offline QA:</strong> otwórz aplikację z <code>?offline-test=1</code> i sprawdź, że
+      importy/eksporty działają, a konsola nie zgłasza żądań sieciowych.</li>
+  <li><strong>Import/eksport:</strong> zaimportuj <code>test-fixtures/round3-dialog.srt</code>
+      oraz <code>test-fixtures/round3-import.docx</code>, potem wyeksportuj DOCX, XLSX, CSV ZIP, SRT i VTT.
+      Sprawdź polskie znaki i timestampy.</li>
+  <li><strong>Cancel w UI:</strong> uruchom analizę dłuższego wpisu i przerwij ją przyciskiem —
+      wpis ma wrócić do stanu sprzed analizy, bez utraty transkryptu.</li>
+</ol>
+
+<script>
+const DB_NAME = 'skryptorium_audio';
+const DB_VERSION = 2;
+const ENTRIES = 'entries';
+const META = 'meta';
+const MIGRATION_META_KEY = 'localStorageEntriesV2';
+const PREFIX = 'bench_';
+const out = document.getElementById('out');
+const summaryBox = document.getElementById('summary');
+const measurements = [];
+
+function say(text) { out.textContent = text; }
+function append(text) { out.textContent += '\n' + text; }
+
+document.getElementById('originCheck').innerHTML = location.protocol === 'file:'
+  ? '<span style="color:#a02c2c"><strong>Uwaga:</strong> strona działa z file:// — pomiar w iframe będzie zablokowany. Uruchom serwer HTTP jak wyżej.</span>'
+  : '<span class="ok">Origin OK: ' + location.origin + '</span>';
+
+// ------------------------------------------------------------- IndexedDB
+
+function openDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains('blobs')) db.createObjectStore('blobs');
+      if (!db.objectStoreNames.contains(ENTRIES)) db.createObjectStore(ENTRIES, { keyPath: 'id' });
+      if (!db.objectStoreNames.contains(META)) db.createObjectStore(META);
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function txDone(tx) {
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = resolve;
+    tx.onabort = () => reject(tx.error || new Error('abort'));
+    tx.onerror = () => reject(tx.error || new Error('tx error'));
+  });
+}
+
+async function allEntries() {
+  const db = await openDb();
+  const store = db.transaction(ENTRIES, 'readonly').objectStore(ENTRIES);
+  const entries = await new Promise((resolve, reject) => {
+    const request = store.getAll();
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error);
+  });
+  db.close();
+  return entries;
+}
+
+async function putEntries(entries) {
+  const db = await openDb();
+  const tx = db.transaction([ENTRIES, META], 'readwrite');
+  const store = tx.objectStore(ENTRIES);
+  for (const entry of entries) store.put(entry);
+  // Zablokuj ponowną migrację ze starego localStorage podczas pomiaru.
+  tx.objectStore(META).put(true, MIGRATION_META_KEY);
+  await txDone(tx);
+  db.close();
+}
+
+async function deleteBenchEntries() {
+  const db = await openDb();
+  const tx = db.transaction(ENTRIES, 'readwrite');
+  const store = tx.objectStore(ENTRIES);
+  let removed = 0;
+  await new Promise((resolve, reject) => {
+    const request = store.openCursor();
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) return resolve();
+      if (String(cursor.key).startsWith(PREFIX)) { cursor.delete(); removed += 1; }
+      cursor.continue();
+    };
+    request.onerror = () => reject(request.error);
+  });
+  await txDone(tx);
+  db.close();
+  return removed;
+}
+
+// ------------------------------------------------------------- fixtures
+
+const TOPICS = ['konsultacje społeczne', 'budżet obywatelski', 'panel obywatelski',
+  'deliberacja', 'dialog obywatelski', 'rada dzielnicy'];
+const SPEAKERS = ['Anna Kowalska', 'Piotr Nowak', 'Maria Zielińska', 'Jan Wiśniewski'];
+const EVENTS = ['Forum Praktyków Partycypacji 2024', 'Forum Praktyków Partycypacji 2025', 'Seminarium lokalne'];
+
+function makeEntry(index) {
+  const topic = TOPICS[index % TOPICS.length];
+  const segments = [];
+  for (let s = 0; s < 6; s += 1) {
+    segments.push({
+      start: s * 30, end: s * 30 + 29,
+      segmentId: `bench-seg-${index}-${s}`,
+      text: `Fragment ${s + 1} wystąpienia numer ${index} na temat ${topic} w kontekście samorządu i mieszkańców.`,
+    });
+  }
+  return {
+    id: `${PREFIX}${String(index).padStart(5, '0')}`,
+    schemaVersion: 5,
+    title: `Wystąpienie ${index} — ${topic}`,
+    createdAt: new Date(Date.now() - index * 3600000).toISOString(),
+    durationSec: 180,
+    speaker: SPEAKERS[index % SPEAKERS.length],
+    event: EVENTS[index % EVENTS.length],
+    sessionType: index % 3 === 0 ? 'panel' : 'wykład',
+    language: 'pl',
+    fileName: `bench_${index}.wav`,
+    segments,
+    transcript: segments.map(segment => segment.text).join(' '),
+    transcriptRaw: segments.map(segment => segment.text).join(' '),
+    cleanTranscript: '',
+    summary: `Streszczenie wystąpienia ${index} dotyczącego tematu ${topic}.`,
+    outline: `## Wprowadzenie\n- kontekst\n## Rozwinięcie\n- ${topic}`,
+    theses: [`Teza wystąpienia ${index} o ${topic}.`],
+    concepts: [{ term: topic, definition: `Definicja pojęcia ${topic}.` }],
+    methods: [{ name: `metoda ${index % 7}`, description: 'Opis zastosowania metody.' }],
+    examples: [`Przykład wdrożenia numer ${index}.`],
+    problems: ['Niska frekwencja mieszkańców.'],
+    recommendations: ['Publikuj raport z konsultacji uwaga po uwadze.'],
+    quotesWorthSaving: ['Partycypacja to proces, nie wydarzenie.'],
+    questionsForFurtherAnalysis: ['Jak mierzyć jakość odpowiedzi na uwagi?'],
+    keywords: [{ word: topic.split(' ')[0], count: 5 }],
+    tags: [index % 2 ? 'panel' : 'wykład', topic.split(' ')[0]],
+    analysisStatus: 'done',
+    lastAnalyzedAt: new Date().toISOString(),
+    chapters: [],
+    graphicSummary: { centralTopic: topic, topicMap: [], processFlow: [], knowledgeCards: [] },
+    visualPrompt: '',
+  };
+}
+
+// --------------------------------------------------------------- pomiar
+
+function findAppUrl() {
+  return '../index.html';
+}
+
+function loadApp() {
+  return new Promise((resolve, reject) => {
+    const frame = document.getElementById('app');
+    const started = performance.now();
+    frame.onload = () => resolve({ frame, loadMs: performance.now() - started });
+    frame.onerror = () => reject(new Error('iframe error'));
+    frame.src = findAppUrl() + '?closure-bench=1&t=' + Date.now();
+  });
+}
+
+async function waitForCards(frame, expected, timeoutMs = 120000) {
+  const started = performance.now();
+  for (;;) {
+    let count = 0;
+    try {
+      count = frame.contentDocument.querySelectorAll('article.entry').length;
+    } catch (error) {
+      throw new Error('Brak dostępu do iframe (inny origin?). Uruchom przez http://localhost:8899');
+    }
+    if (count >= expected) return { ms: performance.now() - started, count };
+    if (performance.now() - started > timeoutMs) return { ms: performance.now() - started, count, timeout: true };
+    await new Promise(resolve => setTimeout(resolve, 60));
+  }
+}
+
+async function measureScroll(frame, durationMs = 1800) {
+  const win = frame.contentWindow;
+  const doc = frame.contentDocument;
+  const frames = [];
+  let last = performance.now();
+  let stop = false;
+  const tick = () => {
+    const now = performance.now();
+    frames.push(now - last);
+    last = now;
+    if (!stop) win.requestAnimationFrame(tick);
+  };
+  win.requestAnimationFrame(tick);
+  const maxScroll = Math.max(0, doc.documentElement.scrollHeight - win.innerHeight);
+  const startedAt = performance.now();
+  while (performance.now() - startedAt < durationMs) {
+    const ratio = (performance.now() - startedAt) / durationMs;
+    win.scrollTo(0, maxScroll * ratio);
+    await new Promise(resolve => setTimeout(resolve, 16));
+  }
+  stop = true;
+  await new Promise(resolve => setTimeout(resolve, 50));
+  win.scrollTo(0, 0);
+  const sorted = frames.slice(1).sort((a, b) => a - b);
+  if (!sorted.length) return { medianFrameMs: null, p95FrameMs: null, longFrames: 0 };
+  return {
+    medianFrameMs: Math.round(sorted[Math.floor(sorted.length / 2)] * 10) / 10,
+    p95FrameMs: Math.round(sorted[Math.floor(sorted.length * 0.95)] * 10) / 10,
+    longFrames: sorted.filter(value => value > 50).length,
+    totalFrames: sorted.length,
+  };
+}
+
+async function measureSearch(frame, query) {
+  const doc = frame.contentDocument;
+  const input = doc.querySelector('#globalSearch');
+  if (!input) return { ms: null, note: 'brak pola #globalSearch' };
+  const started = performance.now();
+  input.value = query;
+  input.dispatchEvent(new frame.contentWindow.Event('input', { bubbles: true }));
+  const results = doc.querySelector('#searchResults');
+  const deadline = performance.now() + 20000;
+  while (performance.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 40));
+    if (results && results.textContent.trim()) break;
+  }
+  const ms = Math.round((performance.now() - started) * 10) / 10;
+  const summary = doc.querySelector('#searchSummary');
+  return { ms, summary: summary ? summary.textContent.trim().slice(0, 120) : '' };
+}
+
+function memoryNow(win) {
+  const memory = win.performance && win.performance.memory;
+  return memory ? Math.round(memory.usedJSHeapSize / 1048576) : null;
+}
+
+async function runBenchmark(size) {
+  document.querySelectorAll('button').forEach(button => { button.disabled = true; });
+  try {
+    say(`[${size}] czyszczę poprzednie wpisy testowe…`);
+    await deleteBenchEntries();
+    append(`[${size}] generuję ${size} wpisów…`);
+    const batch = [];
+    for (let index = 0; index < size; index += 1) batch.push(makeEntry(index));
+    const seedStart = performance.now();
+    for (let offset = 0; offset < batch.length; offset += 500) {
+      await putEntries(batch.slice(offset, offset + 500));
+      append(`[${size}] zapisano ${Math.min(offset + 500, batch.length)}/${size}`);
+    }
+    const seedMs = Math.round(performance.now() - seedStart);
+
+    append(`[${size}] ładuję aplikację…`);
+    const { frame, loadMs } = await loadApp();
+    const cards = await waitForCards(frame, Math.min(size, 150)) // aplikacja renderuje porcję 150 kart (RENDER_PAGE_SIZE);
+    append(`[${size}] karty w DOM: ${cards.count} po ${Math.round(cards.ms)} ms${cards.timeout ? ' (TIMEOUT)' : ''}`);
+
+    append(`[${size}] mierzę scroll…`);
+    const scroll = await measureScroll(frame);
+    append(`[${size}] mierzę wyszukiwanie…`);
+    const search = await measureSearch(frame, 'budżet obywatelski');
+    const heapMb = memoryNow(frame.contentWindow);
+
+    const row = {
+      entries: size,
+      seedMs,
+      iframeLoadMs: Math.round(loadMs),
+      timeToCardsMs: Math.round(cards.ms),
+      cardsRendered: cards.count,
+      renderTimeout: !!cards.timeout,
+      scrollMedianFrameMs: scroll.medianFrameMs,
+      scrollP95FrameMs: scroll.p95FrameMs,
+      scrollLongFrames: scroll.longFrames,
+      searchMs: search.ms,
+      searchSummary: search.summary || search.note || '',
+      heapMb,
+    };
+    measurements.push(row);
+    renderSummary();
+    append(`[${size}] GOTOWE: ${JSON.stringify(row)}`);
+  } catch (error) {
+    append('BŁĄD: ' + error.message);
+  } finally {
+    document.querySelectorAll('button').forEach(button => { button.disabled = false; });
+  }
+}
+
+function renderSummary() {
+  if (!measurements.length) { summaryBox.innerHTML = ''; return; }
+  const header = ['Wpisy', 'Zasiew (ms)', 'Load iframe (ms)', 'Do kart (ms)', 'Kart', 'Scroll mediana (ms)',
+    'Scroll p95 (ms)', 'Klatki >50ms', 'Szukanie (ms)', 'Heap (MB)'];
+  const rows = measurements.map(item => [item.entries, item.seedMs, item.iframeLoadMs, item.timeToCardsMs,
+    item.cardsRendered + (item.renderTimeout ? ' ⚠' : ''), item.scrollMedianFrameMs, item.scrollP95FrameMs,
+    item.scrollLongFrames, item.searchMs, item.heapMb == null ? '—' : item.heapMb]);
+  summaryBox.innerHTML = '<h2>Wyniki</h2><table><tr>' + header.map(h => `<th>${h}</th>`).join('') + '</tr>'
+    + rows.map(cells => '<tr>' + cells.map(cell => `<td>${cell}</td>`).join('') + '</tr>').join('') + '</table>'
+    + '<p><button id="copyJson">Kopiuj wyniki jako JSON</button> '
+    + '<button id="saveJson">⬇ Zapisz RESULTS_browser.json</button></p>';
+  document.getElementById('copyJson').onclick = () => {
+    navigator.clipboard.writeText(JSON.stringify({ generatedAt: new Date().toISOString(),
+      userAgent: navigator.userAgent, measurements }, null, 2));
+    append('Skopiowano do schowka.');
+  };
+  document.getElementById('saveJson').onclick = () => {
+    const blob = new Blob([JSON.stringify({ generatedAt: new Date().toISOString(),
+      userAgent: navigator.userAgent, measurements }, null, 2)], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'RESULTS_browser.json';
+    link.click();
+    append('Zapisano RESULTS_browser.json — przenieś go do katalogu tests\\.');
+  };
+}
+
+// -------------------------------------------------------------- akcje
+
+document.getElementById('backup').onclick = async () => {
+  const entries = await allEntries();
+  const real = entries.filter(entry => !String(entry.id).startsWith(PREFIX));
+  const blob = new Blob([JSON.stringify({ entries: real }, null, 2)], { type: 'application/json' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'skryptorium_backup_' + Date.now() + '.json';
+  link.click();
+  say(`Kopia zapasowa: ${real.length} realnych wpisów (wpisy bench_ pominięte).`);
+};
+
+document.getElementById('countNow').onclick = async () => {
+  const entries = await allEntries();
+  const bench = entries.filter(entry => String(entry.id).startsWith(PREFIX)).length;
+  say(`W bazie: ${entries.length} wpisów łącznie, w tym ${bench} testowych (bench_) i ${entries.length - bench} realnych.`);
+};
+
+document.getElementById('cleanup').onclick = async () => {
+  const removed = await deleteBenchEntries();
+  say(`Usunięto ${removed} wpisów testowych. Realne wpisy nietknięte.`);
+};
+
+document.getElementById('reloadTest').onclick = async () => {
+  try {
+    say('Test trwałości: ładuję aplikację…');
+    const first = await loadApp();
+    const before = await waitForCards(first.frame, 1, 30000);
+    const beforeCount = before.count;
+    say(`Przed reloadem kart: ${beforeCount}. Przeładowuję…`);
+    const second = await loadApp();
+    const after = await waitForCards(second.frame, 1, 30000);
+    const doc = second.frame.contentDocument;
+    const withTranscript = [...doc.querySelectorAll('article.entry')]
+      .filter(article => (article.textContent || '').trim().length > 50).length;
+    const verdict = after.count === beforeCount ? 'PASS' : 'FAIL';
+    say(`[${verdict}] po reloadzie kart: ${after.count} (przed: ${beforeCount}), `
+      + `kart z treścią: ${withTranscript}`);
+  } catch (error) {
+    say('BŁĄD: ' + error.message);
+  }
+};
+
+document.querySelectorAll('[data-bench]').forEach(button => {
+  button.onclick = () => runBenchmark(Number(button.dataset.bench));
+});
+</script>
+</body>
+</html>
