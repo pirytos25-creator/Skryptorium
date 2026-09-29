@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+
+# Sekrety i konfiguracja lokalna
+.env
+.env.*
+*.key
+*.pem
+secrets.json
+
+# Modele i cache
+models/
+.cache/
+huggingface/
+faster-whisper-master/
+*.bin
+*.safetensors
+*.gguf
+*.ct2
+
+# Materiał użytkownika — nagrania i transkrypty NIE trafiają do repozytorium
+tests/audio/
+recordings/
+uploads/
+temp/
+tmp/
+*.wav
+*.mp3
+*.m4a
+*.flac
+*.ogg
+*.opus
+
+# Wyniki przebiegów testowych (historia pomiarów, nie kod)
+RESULTS_*.json
+tests/RESULTS_*.json
+*.log
+logs/
+
+# Kopie robocze
+*.bak
+*.tmp
+*.old
+*~
+*copy*
+*backup*
+
+# System operacyjny
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Edytory
+.vscode/
+.idea/
+*.swp
+
+# Wyjątki: fixtures testowe muszą zostać w repozytorium
+!tests/fixtures/
+!tests/fixtures/**
